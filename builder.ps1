@@ -70,5 +70,5 @@ function Invoke-HashedPayload {
 }
 
 # --- Execution ---
-# Ensure keybook.json is in the same directory
+# Ensure keybook1.json is in the same directory
 Invoke-HashedPayload -JsonPath ".\keybook.json"
