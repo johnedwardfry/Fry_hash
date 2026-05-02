@@ -5,7 +5,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
-
+// INSERT_DEFINITIONS_HERE
 // Link the Cryptography Next Generation (CNG) library
 #pragma comment(lib, "bcrypt.lib")
 
