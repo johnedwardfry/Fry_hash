@@ -318,5 +318,5 @@ if __name__ == '__main__':
     )
 
     # Chunking at 8 hex chars (4 bytes)
-    hex_targets = chunk_hex_payload(calc_shellcode_hex, hex_chunk_size=8)
+    hex_targets = chunk_hex_payload(calc_shellcode_hex, hex_chunk_size=10)
     mine_gpu_sequence(source_file, hex_targets)
